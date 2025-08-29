@@ -57,6 +57,7 @@ void runHttpServer(oatpp::mcp::Server mcpServer) {
 void ServerTest::onRun() {
 
   /* Create MCP server */
+  /* Access SSE via: http://localhost:3001/mcp/sse */
   oatpp::mcp::Server server({"mcp/"});
 
   /* Add prompts */

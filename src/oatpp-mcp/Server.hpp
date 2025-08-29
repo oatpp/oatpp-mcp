@@ -18,6 +18,10 @@ class Server {
 public:
 
   struct Config {
+    /**
+    * @brief Prefix from the root (e.g., http://<host>:<port>/<ssePrefix>/sse).
+    * Note: /sse - is standard endpoint in MCP.
+    */
     oatpp::String ssePrefix;
   };
 
