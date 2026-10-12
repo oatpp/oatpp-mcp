@@ -10,6 +10,7 @@
 #include "event/Server.hpp"
 #include "sse/Controller.hpp"
 
+#include "utils/AccessGuard.hpp"
 #include "utils/ApiBridge.hpp"
 
 namespace oatpp { namespace mcp {
@@ -19,6 +20,14 @@ public:
 
   struct Config {
     oatpp::String ssePrefix;
+    /**
+     * Who may open and address a session over the SSE endpoints. A server that listens on a socket
+     * should set {@link utils::AccessGuard::Config::allowedHosts} to the names it is reachable by -
+     * that is the one check that DNS rebinding needs and the one this module cannot infer.
+     */
+    utils::AccessGuard::Config access;
+    /** Session registry limits - see &l:oatpp::mcp::event::Server::Config;. */
+    event::Server::Config sessions;
   };
 
 private:

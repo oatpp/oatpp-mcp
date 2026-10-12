@@ -56,8 +56,18 @@ void runHttpServer(oatpp::mcp::Server mcpServer) {
 
 void ServerTest::onRun() {
 
+  oatpp::mcp::Server::Config config;
+  config.ssePrefix = "mcp/";
+
+  /*
+   * The names this server is willing to be addressed by. It binds 0.0.0.0 below, so leaving this
+   * empty means any DNS name that ever resolves to this machine - including one somebody else is
+   * pointing here - is accepted. See SECURITY-FINDINGS.md, finding F4.
+   */
+  config.access.allowedHosts = {"localhost", "127.0.0.1"};
+
   /* Create MCP server */
-  oatpp::mcp::Server server({"mcp/"});
+  oatpp::mcp::Server server(config);
 
   /* Add prompts */
   server.addPrompt(std::make_shared<prompts::CodeReview>());

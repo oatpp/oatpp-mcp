@@ -4,6 +4,8 @@
 
 #include "ReadCallback.hpp"
 
+#include "oatpp-mcp/utils/LogSafe.hpp"
+
 #include "oatpp/data/stream/BufferStream.hpp"
 #include "oatpp/base/Log.hpp"
 
@@ -50,7 +52,12 @@ oatpp::String ReadCallback::waitEvent() {
 
   auto event = m_session->getOutStream()->read(std::chrono::milliseconds(0) /* wait until event */);
 
-  OATPP_LOGd("Event", "[{}] <-- : {}", m_session->getId(), event.data)
+  /*
+   * Outbound, but not therefore safe: a tool result often contains text the tool read from wherever
+   * the tool reads, and this line is the one place that text is written to the log.
+   */
+  OATPP_LOGd("Event", "[{}] <-- : {}", m_session->getId(),
+             oatpp::mcp::utils::LogSafe::text(event.data, oatpp::mcp::utils::LogSafe::MaxMessageLength))
 
   if(event) {
     oatpp::data::stream::BufferOutputStream ss(256);

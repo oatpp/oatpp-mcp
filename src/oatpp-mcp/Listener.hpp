@@ -33,6 +33,33 @@ private:
   oatpp::data::mapping::ObjectRemapper m_remapper;
 private:
   void sendRpcResult(event::Session& session, const oatpp::Object<dto::RpcResult>& result);
+  /**
+   * Answer with a JSON-RPC error object.
+   * @param id - the identifier to echo, or @c nullptr when the message did not carry one that
+   *        could be read. JSON-RPC requires the error to be sent with a null id in exactly that
+   *        case, which is why this takes an id rather than the call.
+   * @param code - a JSON-RPC 2.0 error code, see §5.1.
+   * @param message - a short, generic, client-facing description.
+   */
+  void sendRpcError(event::Session& session, const oatpp::Any& id, v_int32 code,
+                    const oatpp::String& message);
+  /**
+   * Answer <c>-32602 Invalid params</c> for one method.
+   * @param method - the method name, for the log.
+   * @param detail - why the parameters were rejected, for the log. It is deliberately not sent:
+   *        mapper internals in a client-facing message describe the implementation and buy an
+   *        attacker nothing else.
+   */
+  void sendInvalidParams(event::Session& session, const oatpp::Object<dto::RpcCall>& call,
+                         const char* method, const char* detail);
+  /**
+   * Validate the JSON-RPC envelope of one message and dispatch it.
+   *
+   * Split out of {@link onEvent()} so that the outermost catch has one obvious job: nothing that
+   * this function does not already answer may reach the session thread. See SECURITY-FINDINGS.md,
+   * finding F3.
+   */
+  void handleCall(event::Session& session, const event::Event& event);
   oatpp::Object<dto::ServerCapabilities> getServerCapabilities();
 private:
   void resourcesList(event::Session& session, const oatpp::Object<dto::RpcCall>& call);

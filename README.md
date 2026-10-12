@@ -87,3 +87,33 @@ Find working example in tests `/test/oatpp-mcp/app/ServerTest.cpp`
   router->addController(server.getSseController());
 ```
 
+### Serving over SSE: who may connect
+
+An SSE endpoint authenticates nothing it cannot infer, so the two checks that remove the attacks
+needing no credential are on by default - and one of them has to be told about the deployment:
+
+```cpp
+  oatpp::mcp::Server::Config config;
+  config.ssePrefix = "mcp/";
+
+  /* The names this server is willing to be addressed by. */
+  config.access.allowedHosts = {"localhost", "127.0.0.1"};
+
+  /* Only needed for a front-end that rewrites Host, or a non-browser origin. */
+  config.access.allowedOrigins = {"https://app.example.com"};
+
+  /* Sessions: refuse rather than run out, and optionally reclaim quiet ones. */
+  config.sessions.maxSessions = 1000;             /* 0 = unlimited */
+  config.sessions.sessionIdleTimeoutMillis = 0;   /* 0 = never expire */
+
+  oatpp::mcp::Server server(config);
+```
+
+- A request that carries an `Origin` this server is not - and is not configured to accept - is
+  refused with `403`. A request with no `Origin` at all (curl, the SDKs, a proxy) is let through.
+- `allowedHosts` is the check that sees DNS rebinding. It is empty by default, because the library
+  cannot know the names you deploy under; leaving it empty is warned about once at startup.
+- A message for an unknown session is answered `404`, and a full server answers `503`.
+- None of this is authentication. Who the client is, and what it may call, stays the embedding
+  application's decision - see [SECURITY-FINDINGS.md](SECURITY-FINDINGS.md), finding F4.
+
