@@ -151,7 +151,7 @@ void ObjectSchemaMapper::mapEnum(const ObjectSchemaMapper* mapper, State& state,
     data::mapping::ObjectToTreeMapper::Config config;
     data::mapping::ObjectToTreeMapper::State s;
     s.config = &config;
-    s.tree = &enumValues[i];
+    s.tree = &enumValues[(int)i];
 
     oToTree.map(s, anyV);
 
