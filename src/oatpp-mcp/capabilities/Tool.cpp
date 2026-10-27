@@ -5,6 +5,7 @@
 #include "Tool.hpp"
 
 #include "oatpp-mcp/capabilities/Utils.hpp"
+#include "oatpp-mcp/utils/HttpSanitize.hpp"
 
 #include "oatpp/web/protocol/http/outgoing/BufferBody.hpp"
 #include "oatpp/base/Log.hpp"
@@ -94,14 +95,35 @@ oatpp::String EndpointTool::prepareEndpointPath(const std::unordered_map<oatpp::
         } else {
           ss << "&";
         }
-        ss << param.name << "=" << it->second;
+        /*
+         * Both halves are encoded: a parameter name is an argument name, and an argument name is
+         * chosen by whoever described the tool - which for an endpoint exposed as a tool is not
+         * necessarily somebody who reviewed this request.
+         */
+        ss << utils::HttpSanitize::encodeQueryComponent(param.name)
+           << "="
+           << utils::HttpSanitize::encodeQueryComponent(it->second);
       }
     }
     pathTail = ss.toString();
   }
 
+  /*
+   * Pattern::reconstruct() substitutes path variables verbatim, so the values are encoded before
+   * they get there. Encoding the whole map - rather than only the names the pattern references -
+   * keeps the keys identical, and reconstruct() throwing std::out_of_range on a missing variable is
+   * behaviour worth preserving.
+   */
+  std::unordered_map<oatpp::String, oatpp::String> encodedArgs;
+  for(auto& arg : args) {
+    encodedArgs[arg.first] = utils::HttpSanitize::encodePathSegment(arg.second);
+  }
+
   auto pattern = oatpp::web::url::mapping::Pattern::parse(m_endpoint->info()->path);
-  return pattern->reconstruct(args, pathTail);
+  auto path = pattern->reconstruct(encodedArgs, pathTail);
+
+  utils::HttpSanitize::validateRequestTarget(path);
+  return path;
 
 }
 
@@ -115,6 +137,12 @@ EndpointTool::Headers EndpointTool::prepareEndpointHeaders(const std::unordered_
     auto& param = info.headers[hp];
     auto it = args.find(param.name);
     if(it != args.end()) {
+      /*
+       * The one place where encoding is not an option: there is no encoding for a header, and
+       * stripping CR or LF would silently send a different header than the caller asked for.
+       * Reject, and let the tool call fail.
+       */
+      utils::HttpSanitize::validateHeaderField(param.name, it->second);
       result.put(it->first, it->second);
     }
   }
