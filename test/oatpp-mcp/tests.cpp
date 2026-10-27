@@ -1,41 +1,139 @@
-#include "oatpp-mcp/app/ServerTest.hpp"
+//
+// Test runner for oatpp-mcp.
+//
+// Usage:
+//   module-tests                run every registered test in this process
+//   module-tests --test=<Name>  run a single test (this is what CTest uses)
+//   module-tests --list         print the registry and exit
+//
+// Tests are listed in test/CMakeLists.txt (MCP_TESTS) and in the registry below. A name that is in
+// one list but not the other fails loudly: CTest fails on the unknown `--test=`, and `--list` is the
+// place to look when it does.
+//
 
+
+#include "oatpp/Environment.hpp"
+#include "oatpp/base/Log.hpp"
+#include "oatpp-test/UnitTest.hpp"
+
+#include <functional>
 #include <iostream>
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace {
 
-class SilentLogger : public oatpp::Logger {
+class TestDescriptor {
 public:
-
-  void log(v_uint32 priority, const std::string& tag, const std::string& message) override {
-    // Do nothing
-  }
-
+  const char* name;
+  const char* tag;
+  bool leakChecked;
+  const char* leakCheckNote;
+  std::function<std::shared_ptr<oatpp::test::UnitTest>()> create;
 };
 
-void runTests() {
-  OATPP_RUN_TEST(oatpp::mcp::app::ServerTest);
+/**
+ * Tests of this module. Keep in sync with MCP_TESTS in test/CMakeLists.txt.
+ */
+static std::vector<TestDescriptor> tests() {
+  return {};
+}
+
+static int runOne(const TestDescriptor& test) {
+  auto instance = test.create();
+
+  if(test.leakChecked) {
+    instance->run();
+    return 0;
+  }
+
+  // Same lifecycle as oatpp::test::UnitTest::run(), minus its "no oatpp object may outlive the
+  // test" assertion - see the note in the registry.
+  OATPP_LOGi(test.tag, "\033[1mSTART\033[0m... (object-leak check disabled: {})",
+             test.leakCheckNote ? test.leakCheckNote : "n/a")
+  instance->before();
+  instance->onRun();
+  instance->after();
+  OATPP_LOGi(test.tag, "\033[1mFINISHED\033[0m - \033[1;32msuccess!\033[0m")
+  return 0;
 }
 
 }
 
-int main() {
+int main(int argc, const char* argv[]) {
+  std::string selection;
+  bool listOnly = false;
 
-  oatpp::Environment::init(
-    //std::make_shared<SilentLogger>()
-  );
+  for(int i = 1; i < argc; i++) {
+    std::string arg = argv[i];
+    if(arg == "--list") {
+      listOnly = true;
+    } else if(arg.rfind("--test=", 0) == 0) {
+      selection = arg.substr(std::string("--test=").size());
+    } else {
+      std::cerr << "usage: " << argv[0] << " [--list] [--test=<TestName>]" << std::endl;
+      return 2;
+    }
+  }
 
-  runTests();
+  auto registry = tests();
 
-  /* Print how much objects were created during app running, and what have left-probably leaked */
-  /* Disable object counting for release builds using '-D OATPP_DISABLE_ENV_OBJECT_COUNTERS' flag for better performance */
-  std::cout << "\nEnvironment:\n";
-  std::cout << "objectsCount = " << oatpp::Environment::getObjectsCount() << "\n";
-  std::cout << "objectsCreated = " << oatpp::Environment::getObjectsCreated() << "\n\n";
+  if(listOnly) {
+    for(auto& t : registry) {
+      std::cout << t.name << std::endl;
+    }
+    return EXIT_SUCCESS;
+  }
 
-  OATPP_ASSERT(oatpp::Environment::getObjectsCount() == 0);
+  oatpp::Environment::init();
+
+  v_int32 run = 0;
+  v_int32 failed = 0;
+  bool skippedLeakCheck = false;
+
+  for(auto& t : registry) {
+    if(!selection.empty() && selection != t.name) {
+      continue;
+    }
+    run ++;
+    if(!t.leakChecked) {
+      skippedLeakCheck = true;
+    }
+    try {
+      runOne(t);
+    } catch (const std::exception& e) {
+      failed ++;
+      OATPP_LOGe(t.tag, "test threw an unhandled exception: %s", e.what())
+    } catch (...) {
+      failed ++;
+      OATPP_LOGe(t.tag, "test threw an unknown exception")
+    }
+  }
+
+  if(run == 0) {
+    if(selection.empty()) {
+      std::cout << "no tests registered" << std::endl;
+      oatpp::Environment::destroy();
+      return EXIT_SUCCESS;
+    }
+    std::cerr << "no such test: '" << selection << "'. Available:" << std::endl;
+    for(auto& t : registry) {
+      std::cerr << "  " << t.name << std::endl;
+    }
+    oatpp::Environment::destroy();
+    return 2;
+  }
+
+  // The global leak check is only meaningful if every test in this process was able to release
+  // everything it allocated.
+  if(!skippedLeakCheck) {
+    OATPP_ASSERT(oatpp::Environment::getObjectsCount() == 0)
+  }
 
   oatpp::Environment::destroy();
 
-  return 0;
+  std::cout << (failed == 0 ? "OK" : "FAILED") << " - " << run << " test(s) run, "
+            << failed << " failed" << std::endl;
+  return failed == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
